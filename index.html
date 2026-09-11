@@ -229,6 +229,12 @@
     .mask-grid{grid-template-columns:repeat(6, 26px);}
     .mask-grid .cell{width:26px; height:26px;}
   }
+
+  .walkthrough{background:var(--paper-raised); border:1px solid var(--rule); border-radius:9px; padding:16px 20px; margin:16px 0;}
+  .walkthrough .wt-label{font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); margin-bottom:10px; display:block;}
+  .walkthrough ol{margin:0; padding-left:20px; font-size:.9rem; color:var(--ink-soft);}
+  .walkthrough li{margin-bottom:8px;}
+  .walkthrough li strong{color:var(--ink);}
 </style>
 </head>
 <body>
@@ -307,6 +313,17 @@
       <article class="step" id="s1-1">
         <div class="step-tag"><span class="n">1.1</span>The Big Picture</div>
         <h3>EncoderDecoder — the container everything plugs into</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — one forward pass</span>
+          <ol>
+            <li>A sentence comes in as <code>src</code> — already turned into token ids — plus <code>src_mask</code>, which marks real tokens vs. padding.</li>
+            <li><code>encode()</code> runs once: <code>src_embed(src)</code> turns the ids into 512-number vectors, then <code>self.encoder</code> refines them into <strong>memory</strong>.</li>
+            <li>The output sentence written so far comes in as <code>tgt</code>.</li>
+            <li><code>decode()</code> runs, combining <code>tgt_embed(tgt)</code> with the same <code>memory</code> from step 2, to produce one new vector per target position.</li>
+            <li>Those vectors are <strong>not yet a word</strong> — they get handed to the <code>Generator</code> (1.2) separately, only when an actual word prediction is needed.</li>
+          </ol>
+        </div>
+
         <p>Before opening any individual class, it's worth seeing the shape of the whole pipeline once. The <code>EncoderDecoder</code> class is deliberately thin — it holds five sub-modules built elsewhere and just calls them in the right order.</p>
         <div class="code-card">
           <div class="code-label">Cell 4 — EncoderDecoder</div>
@@ -338,6 +355,16 @@ class EncoderDecoder(nn.Module):
       <article class="step" id="s1-2">
         <div class="step-tag"><span class="n">1.2</span>The Generator</div>
         <h3>Turning a hidden vector into a word</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — one prediction</span>
+          <ol>
+            <li>The decoder hands over one 512-number vector — the representation for the position you want a word for.</li>
+            <li><code>self.proj</code> multiplies that vector by a learned weight matrix, producing one raw score per vocabulary word — a higher score means the model favors that word more.</li>
+            <li><code>log_softmax</code> turns those raw scores into log-probabilities that add up to 1 once exponentiated.</li>
+            <li>The word with the highest probability is the model's best single guess — picking it is exactly what greedy decoding (3.3) does.</li>
+          </ol>
+        </div>
+
         <p>The last step of the pipeline converts a 512-dimensional decoder output into a probability distribution over the vocabulary.</p>
         <div class="code-card">
           <div class="code-label">Cell 5 — Generator</div>
@@ -358,6 +385,16 @@ class EncoderDecoder(nn.Module):
       <article class="step" id="s1-3">
         <div class="step-tag"><span class="n">1.3</span>The Encoder Stack</div>
         <h3>Six identical layers, deep-copied</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — building the stack</span>
+          <ol>
+            <li>Start with one <code>EncoderLayer</code> — one attention block plus one feed-forward block.</li>
+            <li><code>clones()</code> deep-copies it 6 times, producing 6 independent layers that share no weights with each other.</li>
+            <li><code>Encoder.forward()</code> feeds the input <code>x</code> through layer 1, takes that output straight into layer 2, and so on through all 6 layers in order.</li>
+            <li>After the last layer, one final <code>LayerNorm</code> cleans up the numbers — that result is what gets called <strong>memory</strong>.</li>
+          </ol>
+        </div>
+
         <p>The encoder stacks N=6 identical layers on top of one another, followed by a final normalization. The <code>clones()</code> helper is what makes "identical" mean <em>identically shaped</em> rather than <em>literally the same object</em>.</p>
         <div class="code-card">
           <div class="code-label">Cells 6–7 — clones() and Encoder</div>
@@ -384,6 +421,18 @@ class Encoder(nn.Module):
       <article class="step" id="s1-4">
         <div class="step-tag"><span class="n">1.4</span>LayerNorm &amp; Residual Connections</div>
         <h3>The two patterns that make six layers trainable</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — LayerNorm, then the residual wrapper</span>
+          <ol>
+            <li><strong>LayerNorm:</strong> for one token's 512-number vector, compute its mean and standard deviation across those 512 numbers.</li>
+            <li><strong>LayerNorm:</strong> subtract the mean and divide by the standard deviation, so the numbers are centered at 0 with a consistent spread.</li>
+            <li><strong>LayerNorm:</strong> multiply by a learned <code>gamma</code> and add a learned <code>beta</code>, so the network can still stretch or shift the result if that helps.</li>
+            <li><strong>Residual:</strong> keep a copy of the original, untouched <code>x</code> before anything else happens to it.</li>
+            <li><strong>Residual:</strong> normalize a separate copy, run it through the sublayer (attention or feed-forward), and get a transformed result.</li>
+            <li><strong>Residual:</strong> add the original <code>x</code> from step 4 back onto that transformed result — so even if the sublayer does something unhelpful, the original signal is never lost.</li>
+          </ol>
+        </div>
+
         <p>LayerNorm normalizes each token's 512-dimensional feature vector independently — across features, not across the batch — which is what makes it suitable for variable-length sequences.</p>
         <div class="code-card">
           <div class="code-label">Cell 8 — LayerNorm</div>
@@ -422,6 +471,17 @@ class Encoder(nn.Module):
       <article class="step" id="s1-5">
         <div class="step-tag"><span class="n">1.5</span>Encoder Layer &amp; Decoder Layer</div>
         <h3>Two sublayers vs. three</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — encoder layer, then decoder layer</span>
+          <ol>
+            <li><strong>Encoder:</strong> run self-attention where the input looks at itself (Q=K=V=x), wrapped in a residual connection.</li>
+            <li><strong>Encoder:</strong> feed that result through the feed-forward network, also wrapped in a residual connection.</li>
+            <li><strong>Decoder:</strong> run masked self-attention — the target looks only at itself and earlier positions, never the future.</li>
+            <li><strong>Decoder:</strong> run cross-attention — the target (as query) looks at the encoder's memory (as key and value). This is the one step where the decoder actually reads the source sentence.</li>
+            <li><strong>Decoder:</strong> feed the result through the feed-forward network, exactly like the encoder's last step.</li>
+          </ol>
+        </div>
+
         <p>An <code>EncoderLayer</code> wraps two sublayers — self-attention, then feed-forward. A <code>DecoderLayer</code> wraps three — masked self-attention, cross-attention to the encoder's memory, then feed-forward.</p>
         <div class="code-card">
           <div class="code-label">Cell 10 — EncoderLayer</div>
@@ -459,6 +519,16 @@ class Encoder(nn.Module):
       <article class="step" id="s1-6">
         <div class="step-tag"><span class="n">1.6</span>Attention Masking</div>
         <h3>subsequent_mask() — stopping the decoder from peeking ahead</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — building the causal mask</span>
+          <ol>
+            <li>Build a size×size grid where entry [i, j] starts as 1 if position j comes strictly after position i, and 0 otherwise.</li>
+            <li><code>torch.triu(..., diagonal=1)</code> keeps only those "j comes after i" 1s — an upper triangle of the grid.</li>
+            <li>Flip every value with <code>== 0</code>: now <code>True</code> means "j is at or before i" (allowed), and <code>False</code> means "j is in the future" (blocked).</li>
+            <li>When this mask is later applied inside <code>attention()</code> (1.7), every blocked position gets its score forced down to −1e9 before softmax, so its attention weight rounds to essentially zero.</li>
+          </ol>
+        </div>
+
         <p>During training, the decoder is shown the entire target sequence at once for speed (teacher forcing). Without a mask, position <em>i</em> could just copy the answer straight out of position <em>i+1</em> — the causal mask exists to make that structurally impossible.</p>
         <div class="code-card">
           <div class="code-label">Cell 13 — subsequent_mask()</div>
@@ -490,6 +560,21 @@ class Encoder(nn.Module):
       <article class="step" id="s1-7">
         <div class="step-tag"><span class="n">1.7</span>The Attention Mechanism</div>
         <h3>Scaled dot-product attention, then splitting it into 8 heads</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — core attention, then multi-head</span>
+          <ol>
+            <li>Compute a raw similarity score between every query and every key with one matrix multiply (<code>Q @ Kᵀ</code>).</li>
+            <li>Divide every score by √d_k, so the scores don't blow up in magnitude as the head dimension grows.</li>
+            <li>If a mask was provided, push every blocked position's score down to −1e9 before the next step.</li>
+            <li>Softmax turns each query's row of scores into a set of weights that sum to 1.</li>
+            <li>Multiply those weights by the value vectors and sum them — that weighted sum is the new, attention-blended vector for this query.</li>
+            <li><strong>Multi-head:</strong> project Q, K, and V into 512 numbers each using three separate learned linear layers.</li>
+            <li><strong>Multi-head:</strong> reshape each 512-number vector into 8 groups of 64 — one group per head — without changing any of the underlying numbers.</li>
+            <li><strong>Multi-head:</strong> run the exact same 5 attention steps above, independently, inside each of the 8 groups at once.</li>
+            <li><strong>Multi-head:</strong> concatenate all 8 groups' outputs back into 512 numbers, then pass the result through one more learned linear layer (<code>W_O</code>) to mix the heads together.</li>
+          </ol>
+        </div>
+
         <p>This is the core operation: for every query position, decide how much to listen to every key position, then blend the corresponding values accordingly.</p>
         <div class="code-card">
           <div class="code-label">Cell 15 — attention()</div>
@@ -548,6 +633,19 @@ class Encoder(nn.Module):
       <article class="step" id="s1-8">
         <div class="step-tag"><span class="n">1.8</span>Feed-Forward, Embeddings &amp; Position</div>
         <h3>Where each word thinks alone, and how order gets in</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — feed-forward, embeddings, positional encoding</span>
+          <ol>
+            <li><strong>Feed-forward:</strong> take one token's 512-number vector, expand it to 2048 numbers with <code>w_1</code>, and apply ReLU (every negative number becomes 0).</li>
+            <li><strong>Feed-forward:</strong> compress the result back down to 512 numbers with <code>w_2</code>. Every position runs through the identical two weight matrices, independently of every other position.</li>
+            <li><strong>Embeddings:</strong> look up the word's id in a table of learned 512-number vectors.</li>
+            <li><strong>Embeddings:</strong> multiply that vector by √512, so its scale matches what the positional encoding is about to add on top.</li>
+            <li><strong>Positional encoding:</strong> precompute, once, a table of sine and cosine values — one pair of columns per frequency, up to some maximum sequence length.</li>
+            <li><strong>Positional encoding:</strong> for the actual input, slice out the rows for positions 0 through however many tokens are in this sentence.</li>
+            <li><strong>Positional encoding:</strong> add that slice directly onto the embedding vectors from the step above. This table never changes during training — there's nothing to learn here.</li>
+          </ol>
+        </div>
+
         <p>After attention lets positions exchange information, the feed-forward network processes each position independently and identically — the exact same two weight matrices apply to every word in the sequence.</p>
         <div class="code-card">
           <div class="code-label">Cell 17 — PositionwiseFeedForward</div>
@@ -592,6 +690,17 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s1-9">
         <div class="step-tag"><span class="n">1.9</span>Assembling the Full Model</div>
         <h3>make_model() — one function, every piece wired together</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — assembling the model</span>
+          <ol>
+            <li>Build one <code>MultiHeadedAttention</code> module and one <code>PositionwiseFeedForward</code> module — these are just templates, not yet part of the model.</li>
+            <li>Deep-copy the attention template: once for the encoder's self-attention, and twice for the decoder (once for self-attention, once for cross-attention).</li>
+            <li>Deep-copy the feed-forward template once for every layer that needs one.</li>
+            <li>Wire the encoder stack, decoder stack, both embedding pipelines, and the generator together into one <code>EncoderDecoder</code>.</li>
+            <li>Loop over every parameter in the finished model, and apply Xavier initialization to the ones with more than one dimension — the weight matrices, not the biases.</li>
+          </ol>
+        </div>
+
         <div class="code-card">
           <div class="code-label">Cell 21 — make_model()</div>
           <pre>def make_model(src_vocab, tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1):
@@ -628,6 +737,17 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s2-1">
         <div class="step-tag"><span class="n">2.1</span>Batches &amp; Masking</div>
         <h3>The Batch object — where teacher forcing actually happens</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — preparing one training batch</span>
+          <ol>
+            <li>Start with a full target sentence — say, 10 tokens including <code>&lt;s&gt;</code> and <code>&lt;/s&gt;</code>.</li>
+            <li><code>tgt = tgt[:, :-1]</code> drops the last token — this becomes what the decoder actually receives as input.</li>
+            <li><code>tgt_y = tgt[:, 1:]</code> drops the first token — this becomes the answer key the model's predictions get graded against.</li>
+            <li><code>make_std_mask</code> builds the causal mask (1.6) sized to this input's length, and combines it with a padding mask so pad tokens are never attended to either.</li>
+            <li><code>ntokens</code> counts how many <em>real</em>, non-padding labels exist — that count is what the training loss gets divided by later, in 2.2/3.2.</li>
+          </ol>
+        </div>
+
         <div class="code-card">
           <div class="code-label">Cell 23 — Batch</div>
           <pre>class Batch:
@@ -649,6 +769,16 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s2-2">
         <div class="step-tag"><span class="n">2.2</span>Optimizer &amp; Learning Rate Schedule</div>
         <h3>rate() — warm up, then decay</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — reading the schedule</span>
+          <ol>
+            <li>Early in training, while <code>step</code> is small relative to <code>warmup</code>, the term <code>step · warmup⁻¹·⁵</code> is the smaller of the two inside <code>min()</code> — the rate climbs roughly linearly.</li>
+            <li>Once <code>step</code> passes <code>warmup</code>, <code>step⁻⁰·⁵</code> becomes the smaller term instead — the rate starts shrinking, roughly as 1/√step.</li>
+            <li>The <code>min()</code> in the formula is exactly what picks the right behavior at the current step, without needing an if/else anywhere.</li>
+            <li>The whole expression is scaled by <code>factor · d_model⁻⁰·⁵</code>, which just sets the overall height of the curve — bigger models get a smaller peak rate.</li>
+          </ol>
+        </div>
+
         <p>Rather than a fixed learning rate, the Transformer ramps up linearly for the first <code>warmup</code> steps, then decays proportional to the inverse square root of the step count.</p>
         <div class="code-card">
           <div class="code-label">Cell 26 — rate()</div>
@@ -672,6 +802,16 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s2-3">
         <div class="step-tag"><span class="n">2.3</span>Label Smoothing</div>
         <h3>Softening the target so the model never gets overconfident</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — building the smoothed target</span>
+          <ol>
+            <li>Start with a vector of size <code>vocab</code>, and fill every entry with a small floor value: <code>smoothing / (vocab − 2)</code>.</li>
+            <li>Overwrite the entry for the correct word with <code>confidence</code> (e.g. 0.9), replacing that floor value at just that one position.</li>
+            <li>Zero out the entry for the padding token specifically — it's never a valid word to predict.</li>
+            <li>Compare the model's own predicted distribution against this softened target using <code>KLDivLoss</code> — the further apart the two are, the higher the loss the model has to reduce.</li>
+          </ol>
+        </div>
+
         <p>Instead of a hard target (100% on the correct token, 0% everywhere else), label smoothing spreads a small amount of probability mass across every other token in the vocabulary.</p>
         <div class="code-card">
           <div class="code-label">Cell 28 — LabelSmoothing</div>
@@ -710,6 +850,16 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s3-1">
         <div class="step-tag"><span class="n">3.1</span>Data Pipeline — Multi30k</div>
         <h3>Tokenize → vocabulary → collate → DataLoader</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — turning raw text into batches</span>
+          <ol>
+            <li>Every raw sentence gets split into tokens by spaCy — a tokenizer that understands German compound words and English contractions.</li>
+            <li>Every token seen often enough across the dataset earns its own integer id; anything rarer collapses into a shared <code>&lt;unk&gt;</code> id.</li>
+            <li>Each sentence gets wrapped in <code>&lt;s&gt;</code> … <code>&lt;/s&gt;</code> and padded with <code>&lt;blank&gt;</code> up to a fixed length, so every sentence in a batch ends up the same size.</li>
+            <li>A <code>DataLoader</code> pulls batches of these padded, wrapped sentences — optionally splitting them across GPUs with <code>DistributedSampler</code>.</li>
+          </ol>
+        </div>
+
         <p>Four stages turn raw sentence pairs into padded tensor batches:</p>
         <table>
           <tr><th>stage</th><th>cell(s)</th><th>what it does</th></tr>
@@ -723,6 +873,17 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s3-2">
         <div class="step-tag"><span class="n">3.2</span>Distributed Training</div>
         <h3>train_worker() — the same recipe, split across GPUs</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — one training run</span>
+          <ol>
+            <li>Build the model fresh with <code>make_model()</code>, sized to the real vocabulary from 3.1.</li>
+            <li>If training on multiple GPUs, wrap the model in <code>DistributedDataParallel</code> — every GPU gets its own copy of the weights.</li>
+            <li>Build <code>LabelSmoothing</code> as the loss criterion, and the Adam optimizer paired with the warmup schedule from 2.2.</li>
+            <li>For every epoch, loop over every batch: forward pass, compute loss, backward pass, optimizer step — this is the same shape as <code>run_epoch()</code> anywhere else in the notebook.</li>
+            <li>Gradient accumulation (<code>accum_iter=10</code>) means the optimizer only actually steps once every 10 batches, letting a small per-GPU batch size behave like a much larger one.</li>
+          </ol>
+        </div>
+
         <p><code>train_worker()</code> handles both single- and multi-GPU training, using PyTorch's <code>DistributedDataParallel</code> (DDP) with the NCCL backend.</p>
         <div class="code-card">
           <div class="code-label">Training configuration</div>
@@ -744,6 +905,18 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s3-3">
         <div class="step-tag"><span class="n">3.3</span>Greedy Decoding</div>
         <h3>greedy_decode() — encode once, decode many</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — generating a translation</span>
+          <ol>
+            <li>Encode the source sentence exactly once — this produces <code>memory</code>, and it's never recomputed for the rest of decoding.</li>
+            <li>Start the output sequence <code>ys</code> with just the <code>&lt;s&gt;</code> token.</li>
+            <li>Decode <code>ys</code> against <code>memory</code>, using a causal mask sized to <code>ys</code>'s current length.</li>
+            <li>Take the generator's prediction for the very last position only, and pick the single highest-probability word.</li>
+            <li>Append that word onto <code>ys</code>, then repeat from step 3 — each loop, <code>ys</code> is exactly one token longer than before.</li>
+            <li>Stop once <code>max_len</code> steps have run (or, in a fuller implementation, as soon as the model predicts <code>&lt;/s&gt;</code>).</li>
+          </ol>
+        </div>
+
         <div class="code-card">
           <div class="code-label">Cell 33 — greedy_decode()</div>
           <pre>def greedy_decode(model, src, src_mask, max_len, start_symbol):
@@ -762,6 +935,16 @@ self.register_buffer('pe', pe)                  <span class="c"># fixed — not 
       <article class="step" id="s3-4">
         <div class="step-tag"><span class="n">3.4</span>Attention Visualization</div>
         <h3>Reading the .attn attribute out of a trained model</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — pulling out attention weights</span>
+          <ol>
+            <li>Run a trained model's forward pass on a real sentence pair, exactly as during training or inference.</li>
+            <li>Inside every <code>MultiHeadedAttention.forward()</code> call, the attention weights (<code>p_attn</code> from 1.7) get stashed on <code>self.attn</code> right before the function returns.</li>
+            <li>After the forward pass finishes, reach into any layer's <code>self_attn.attn</code> or <code>src_attn.attn</code> to pull out that stored weight matrix.</li>
+            <li>Plot it as a heatmap — rows are the word doing the attending, columns are the word being looked at, and brighter cells mean stronger attention.</li>
+          </ol>
+        </div>
+
         <p>Once trained, each <code>MultiHeadedAttention</code> module has already stored its own attention weight matrix from the last forward pass — <code>attention()</code>, remember, returns both the output and the weights (1.7).</p>
         <div class="code-card">
           <div class="code-label">Cells 46–50 — reaching into a trained model</div>
@@ -779,6 +962,17 @@ decoder_cross = model.decoder.layers[layer].src_attn.attn      <span class="c">#
       <article class="step" id="s3-5">
         <div class="step-tag"><span class="n">3.5</span>Parameter Count</div>
         <h3>Where the ~65 million parameters actually live</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — adding up the total</span>
+          <ol>
+            <li>Each embedding table costs <code>vocab_size × d_model</code> parameters — one table for the source language, one for the target.</li>
+            <li>Each layer's attention block costs 4 weight matrices of <code>d_model × d_model</code> — for Q, K, V, and the output projection W_O.</li>
+            <li>Each layer's feed-forward block costs 2 matrices of roughly <code>d_model × d_ff</code>, plus a small number of bias terms.</li>
+            <li>Multiply the per-layer costs by N=6 for the encoder, and again by N=6 for the decoder (which has one extra attention block per layer).</li>
+            <li>Add the embedding tables and the generator's output projection on top, and the total lands around ~65M parameters for the base configuration.</li>
+          </ol>
+        </div>
+
         <table>
           <tr><th>component</th><th>parameters</th><th>formula</th></tr>
           <tr><td>Token embeddings (src + tgt)</td><td>~10M</td><td>2 × V × 512</td></tr>
