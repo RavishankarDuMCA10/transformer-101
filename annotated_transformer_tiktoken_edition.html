@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Annotated Transformer — TikToken Edition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F3EA;
+    --paper-raised:#FFFFFF;
+    --ink:#23271F;
+    --ink-soft:#5B5F51;
+    --ink-faint:#8A8D7E;
+    --rule:#DDD6C3;
+    --rust:#B24A2B;
+    --rust-soft:#E9D4C7;
+    --teal:#2C6B5A;
+    --teal-soft:#D7E4DD;
+    --code-bg:#20261F;
+    --code-text:#E7E3D4;
+    --code-comment:#8FA98A;
+    --code-accent:#E0A45E;
+    --serif:'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --sans:'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono:'JetBrains Mono', 'Consolas', monospace;
+    --sidebar-w:272px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased;}
+  a{color:var(--rust);}
+  ::selection{background:var(--rust-soft);}
+
+  .shell{display:flex; min-height:100vh;}
+  .sidebar{position:fixed; top:0; left:0; bottom:0; width:var(--sidebar-w); background:var(--paper-raised); border-right:1px solid var(--rule); overflow-y:auto; padding:28px 22px 40px; z-index:30;}
+  .sidebar-brand{font-family:var(--serif); font-weight:600; font-size:1.05rem; color:var(--ink); text-decoration:none; display:block; margin-bottom:4px;}
+  .sidebar-brand .dot{color:var(--rust);}
+  .sidebar-sub{font-size:.78rem; color:var(--ink-faint); margin-bottom:18px;}
+  .edition-switch{display:flex; gap:6px; margin-bottom:26px; border:1px solid var(--rule); border-radius:7px; padding:3px; background:var(--paper);}
+  .edition-switch a{flex:1; text-align:center; font-family:var(--mono); font-size:.7rem; padding:7px 4px; border-radius:5px; text-decoration:none; color:var(--ink-soft);}
+  .edition-switch a.current{background:var(--ink); color:var(--paper);}
+  .sidebar nav .part-label{font-family:var(--mono); font-size:.7rem; letter-spacing:.04em; color:var(--teal); margin:22px 0 8px; display:flex; align-items:baseline; gap:6px;}
+  .sidebar nav .part-label:first-child{margin-top:0;}
+  .sidebar nav .part-num{display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:3px; background:var(--teal-soft); color:var(--teal); font-size:.68rem; font-family:var(--mono);}
+  .sidebar nav ul{list-style:none; margin:0 0 4px; padding:0;}
+  .sidebar nav li a{display:block; padding:5px 0 5px 24px; font-size:.86rem; color:var(--ink-soft); text-decoration:none; border-left:2px solid transparent;}
+  .sidebar nav li a:hover{color:var(--ink); border-left-color:var(--rule);}
+  .sidebar nav li a.active{color:var(--rust); border-left-color:var(--rust); font-weight:500;}
+
+  .menu-toggle{display:none; position:fixed; top:16px; left:16px; z-index:40; width:40px; height:40px; border-radius:8px; border:1px solid var(--rule); background:var(--paper-raised); align-items:center; justify-content:center; cursor:pointer;}
+  .menu-toggle span, .menu-toggle span::before, .menu-toggle span::after{content:''; display:block; width:18px; height:2px; background:var(--ink); position:relative;}
+  .menu-toggle span::before{position:absolute; top:-6px;}
+  .menu-toggle span::after{position:absolute; top:6px;}
+
+  main{margin-left:var(--sidebar-w); flex:1; min-width:0;}
+  .content{max-width:730px; margin:0 auto; padding:64px 32px 120px;}
+
+  .hero{border-bottom:1px solid var(--rule); padding-bottom:36px; margin-bottom:8px;}
+  .hero-eyebrow{font-family:var(--mono); font-size:.78rem; color:var(--teal); margin-bottom:16px; display:flex; align-items:center; gap:10px;}
+  .hero-eyebrow .line{height:1px; width:34px; background:var(--teal); opacity:.5;}
+  .hero h1{font-family:var(--serif); font-size:2.6rem; line-height:1.12; margin:0 0 16px; font-weight:600; letter-spacing:-.01em;}
+  .hero p.lede{font-size:1.08rem; color:var(--ink-soft); max-width:56ch; margin:0 0 22px;}
+  .hero-meta{display:flex; flex-wrap:wrap; gap:10px 22px; font-size:.86rem; color:var(--ink-faint);}
+  .hero-meta strong{color:var(--ink-soft); font-weight:600;}
+  .hero-stats{display:flex; gap:0; margin-top:26px; border:1px solid var(--rule); border-radius:8px; overflow:hidden;}
+  .hero-stats div{flex:1; padding:14px 16px; border-right:1px solid var(--rule);}
+  .hero-stats div:last-child{border-right:none;}
+  .hero-stats .num{font-family:var(--serif); font-size:1.35rem; color:var(--rust); font-weight:600; display:block;}
+  .hero-stats .lbl{font-size:.75rem; color:var(--ink-faint);}
+
+  .diff-banner{display:flex; align-items:center; gap:14px; background:var(--teal-soft); border:1px solid var(--teal); border-radius:9px; padding:14px 18px; margin:28px 0 8px; font-size:.9rem; color:var(--ink);}
+  .diff-banner .pill{font-family:var(--mono); font-size:.7rem; background:var(--teal); color:#fff; padding:3px 9px; border-radius:20px; flex-shrink:0;}
+
+  .part-open{padding:54px 0 8px; border-top:1px solid var(--rule); margin-top:54px;}
+  .part-open:first-of-type{margin-top:44px;}
+  .part-kicker{font-family:var(--mono); font-size:.76rem; color:var(--rust); margin-bottom:10px;}
+  .part-open h2{font-family:var(--serif); font-size:1.9rem; margin:0 0 12px; font-weight:600;}
+  .part-open p{color:var(--ink-soft); max-width:58ch;}
+
+  .step{padding-top:52px; scroll-margin-top:26px;}
+  .step-tag{font-family:var(--mono); font-size:.74rem; color:var(--ink-faint); display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .step-tag .n{background:var(--ink); color:var(--paper); border-radius:4px; padding:2px 7px; font-size:.72rem;}
+  .step h3{font-family:var(--serif); font-size:1.55rem; margin:0 0 12px; font-weight:600;}
+  .step > p{margin:0 0 16px; color:var(--ink-soft);}
+  .step h4.sub{font-family:var(--serif); font-size:1.15rem; margin:26px 0 10px; font-weight:600; color:var(--ink);}
+
+  .code-card{background:var(--code-bg); border-radius:9px; overflow:hidden; margin:16px 0 20px; box-shadow:0 1px 0 rgba(0,0,0,.04);}
+  .code-card .code-label{font-family:var(--mono); font-size:.72rem; color:var(--code-accent); padding:9px 16px; border-bottom:1px solid rgba(255,255,255,.08);}
+  .code-card pre{margin:0; padding:16px; overflow-x:auto; font-family:var(--mono); font-size:.82rem; color:var(--code-text); line-height:1.6;}
+  .code-card .c{color:var(--code-comment);}
+
+  .box{border-radius:8px; padding:16px 18px; margin:18px 0; font-size:.93rem;}
+  .box p{margin:0;}
+  .box .box-label{font-family:var(--mono); font-size:.7rem; letter-spacing:.02em; margin-bottom:6px; display:block;}
+  .box.insight{background:var(--rust-soft); border-left:3px solid var(--rust);}
+  .box.insight .box-label{color:var(--rust);}
+  .box.math{background:var(--teal-soft); border-left:3px solid var(--teal);}
+  .box.math .box-label{color:var(--teal);}
+  .box.math .formula{font-family:var(--mono); font-size:.95rem; color:var(--ink); display:block; margin-top:4px;}
+  .box.analogy{background:var(--paper-raised); border:1px solid var(--rule); border-left:3px solid var(--ink-faint);}
+  .box.analogy .box-label{color:var(--ink-faint);}
+  .box.tradeoff{background:#F0E9D8; border-left:3px solid var(--code-accent);}
+  .box.tradeoff .box-label{color:#8A6A2E;}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:.87rem;}
+  th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule);}
+  th{font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); font-weight:500;}
+  td{color:var(--ink-soft);}
+  tr:last-child td{border-bottom:none;}
+
+  .compare{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:18px 0;}
+  .compare .col{border:1px solid var(--rule); border-radius:9px; padding:16px 18px; background:var(--paper-raised);}
+  .compare .col h5{font-family:var(--mono); font-size:.72rem; margin:0 0 10px; color:var(--ink-faint); text-transform:none;}
+  .compare .col.old h5{color:var(--ink-faint);}
+  .compare .col.new h5{color:var(--teal);}
+  .compare .col ul{margin:0; padding-left:18px; font-size:.87rem; color:var(--ink-soft);}
+  .compare .col li{margin-bottom:6px;}
+  @media (max-width:640px){ .compare{grid-template-columns:1fr;} }
+
+  .footer-cta{margin-top:70px; padding:32px; border:1px solid var(--rule); border-radius:12px; background:var(--paper-raised); text-align:left;}
+  .footer-cta h3{font-family:var(--serif); font-size:1.3rem; margin:0 0 10px;}
+  .footer-cta p{color:var(--ink-soft); margin:0 0 18px; max-width:52ch;}
+  .footer-cta a.btn{display:inline-block; background:var(--ink); color:var(--paper); text-decoration:none; padding:10px 20px; border-radius:6px; font-size:.9rem; margin-right:10px;}
+  .footer-cta a.btn.ghost{background:transparent; color:var(--ink); border:1px solid var(--rule);}
+  footer.page-foot{max-width:730px; margin:40px auto 0; padding:0 32px 60px; font-size:.8rem; color:var(--ink-faint);}
+
+  @media (max-width:860px){
+    .sidebar{transform:translateX(-100%); transition:transform .2s ease; box-shadow:0 0 40px rgba(0,0,0,.15);}
+    .sidebar.open{transform:translateX(0);}
+    main{margin-left:0;}
+    .menu-toggle{display:flex;}
+    .content{padding:88px 20px 100px;}
+    .hero h1{font-size:2rem;}
+  }
+</style>
+</head>
+<body>
+
+<button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation"><span></span></button>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <a href="#top" class="sidebar-brand">The Annotated Transformer<span class="dot">.</span></a>
+    <div class="sidebar-sub">TikToken edition · BPE tokenization</div>
+
+    <div class="edition-switch">
+      <a href="annotated_transformer_blueprint.html">Original</a>
+      <a href="annotated_transformer_tiktoken_edition.html" class="current">TikToken</a>
+    </div>
+
+    <nav>
+      <div class="part-label"><span class="part-num">1</span> What Changes</div>
+      <ul>
+        <li><a href="#t1-1">1.1 Why Swap Tokenizers</a></li>
+        <li><a href="#t1-2">1.2 Installing tiktoken</a></li>
+      </ul>
+
+      <div class="part-label"><span class="part-num">2</span> Tokenizer &amp; Vocab</div>
+      <ul>
+        <li><a href="#t2-1">2.1 load_tokenizers()</a></li>
+        <li><a href="#t2-2">2.2 TiktokenVocabWrapper</a></li>
+        <li><a href="#t2-3">2.3 load_vocab()</a></li>
+      </ul>
+
+      <div class="part-label"><span class="part-num">3</span> Pipeline &amp; Output</div>
+      <ul>
+        <li><a href="#t3-1">3.1 create_dataloaders()</a></li>
+        <li><a href="#t3-2">3.2 check_outputs()</a></li>
+        <li><a href="#t3-3">3.3 Parameter Cost Tradeoff</a></li>
+      </ul>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="content" id="top">
+
+      <header class="hero">
+        <div class="hero-eyebrow"><span class="line"></span>SAME ARCHITECTURE · DIFFERENT FRONT DOOR</div>
+        <h1>The Annotated Transformer — TikToken Edition</h1>
+        <p class="lede">The encoder, decoder, attention, and training loop from the original blueprint are untouched. What changes here is everything upstream of the model: how raw text becomes token IDs in the first place.</p>
+        <div class="hero-meta">
+          <span><strong>Author</strong> Ravi</span>
+          <span><strong>Base</strong> The Annotated Transformer (spaCy edition)</span>
+          <span><strong>Swap</strong> spaCy word tokenizers → tiktoken BPE</span>
+        </div>
+        <div class="hero-stats">
+          <div><span class="num">cl100k_base</span><span class="lbl">shared BPE vocabulary</span></div>
+          <div><span class="num">1</span><span class="lbl">encoder for both languages</span></div>
+          <div><span class="num">0</span><span class="lbl">custom vocab-building pass needed</span></div>
+        </div>
+      </header>
+
+      <article class="step" id="t1-1">
+        <div class="step-tag"><span class="n">1.1</span>Why Swap Tokenizers</div>
+        <h3>From two trained word-vocabularies to one pretrained BPE encoder</h3>
+        <p>The original notebook (Part 3.1 of the blueprint) builds two separate vocabularies from scratch — one for German, one for English — by running spaCy over the entire Multi30k corpus and counting token frequencies. That's accurate, but it's also work: a tokenizer download, a full pass over the dataset, and a <code>min_freq</code> threshold to tune. This edition replaces all of that with <code>tiktoken</code>'s <code>cl100k_base</code> encoding — the same byte-pair-encoding scheme behind GPT-3.5/4 — which already knows how to tokenize dozens of languages, German and English included, with no training pass required.</p>
+        <div class="compare">
+          <div class="col old">
+            <h5>ORIGINAL — spaCy + custom Vocab</h5>
+            <ul>
+              <li>Separate DE and EN tokenizer models</li>
+              <li>Word-level tokens, built from this corpus only</li>
+              <li>Vocabulary built by counting frequencies across train/val/test</li>
+              <li><code>&lt;unk&gt;</code> absorbs anything below <code>min_freq</code></li>
+            </ul>
+          </div>
+          <div class="col new">
+            <h5>TIKTOKEN — one BPE encoder, both languages</h5>
+            <ul>
+              <li>Single <code>cl100k_base</code> encoder reused for DE and EN</li>
+              <li>Subword tokens, pretrained on a massive general corpus</li>
+              <li>Vocabulary is fixed and instant — nothing to build</li>
+              <li>No real <code>&lt;unk&gt;</code> — BPE can always fall back to bytes</li>
+            </ul>
+          </div>
+        </div>
+        <div class="box insight">
+          <span class="box-label">Why this matters</span>
+          <p>Word-level vocabularies are corpus-dependent and brittle — a word Multi30k never saw becomes <code>&lt;unk&gt;</code>, permanently unrecoverable. Subword BPE tokenization can always decompose an unfamiliar word into smaller known pieces (or, worst case, raw bytes), so out-of-vocabulary words essentially stop existing as a category of failure.</p>
+        </div>
+      </article>
+
+      <article class="step" id="t1-2">
+        <div class="step-tag"><span class="n">1.2</span>Installing tiktoken</div>
+        <h3>One extra dependency, dropped into the same setup cell</h3>
+        <div class="code-card">
+          <div class="code-label">Setup — pip install</div>
+          <pre>!pip install -q GPUtil
+!pip install tiktoken</pre>
+        </div>
+        <div class="code-card">
+          <div class="code-label">Imports — one new line</div>
+          <pre>import tiktoken  <span class="c"># Fast BPE tokenizer used here for German/English subword processing</span></pre>
+        </div>
+        <p>Everything else in the notebook's import block — PyTorch, the LR scheduler, Altair for the attention charts, <code>DistributedDataParallel</code> — stays exactly as it was. This is a swap at the data-pipeline boundary, not a rewrite of the model.</p>
+      </article>
+
+      <div class="diff-banner"><span class="pill">UNCHANGED</span> Everything from Part 1 (Architecture) and Part 2 (Training) in the original blueprint — EncoderDecoder, attention, LayerNorm, the warmup schedule, label smoothing — applies here without modification. Only the data-loading section (Part 3.1) is rewritten.</div>
+
+      <article class="step" id="t2-1">
+        <div class="step-tag"><span class="n">2.1</span>load_tokenizers()</div>
+        <h3>One encoder, returned twice</h3>
+        <p>Where the original had two separate <code>load(de)</code> / <code>load(en)</code> calls, this version loads a single universal encoder and hands it back for both slots — deliberately, so the rest of the pipeline still works with an "encoder_de, encoder_en" pair without needing to know they're the same object.</p>
+        <div class="code-card">
+          <div class="code-label">load_tokenizers()</div>
+          <pre>def load_tokenizers():
+    <span class="c">"""
+    Loads the universal tiktoken BPE encoder.
+    Returns the same encoder instance for both German and English slots
+    to preserve compatibility with the rest of your pipeline.
+    """</span>
+    <span class="c"># 'cl100k_base' handles German, English, and dozens of other languages natively.</span>
+    <span class="c"># (If using GPT-4o style processing, you can use "o200k_base" instead)</span>
+    encoder = tiktoken.get_encoding("cl100k_base")
+
+    <span class="c"># Returning the encoder twice so downstream code that expects</span>
+    <span class="c"># tokenizer_de, tokenizer_en = load_tokenizers() keeps working unchanged</span>
+    return encoder, encoder</pre>
+        </div>
+        <div class="box insight">
+          <span class="box-label">Why this matters</span>
+          <p>Because both languages already share representation space through the same BPE merges, a word or subword that looks similar across German and English (proper nouns, cognates, punctuation) can end up mapping to identical or overlapping token IDs — something two independently-trained word vocabularies would never produce.</p>
+        </div>
+      </article>
+
+      <article class="step" id="t2-2">
+        <div class="step-tag"><span class="n">2.2</span>TiktokenVocabWrapper</div>
+        <h3>Making a BPE encoder look like the old Vocab class</h3>
+        <p>Every downstream function in the notebook — collation, batching, the training loop — was written against a <code>Vocab</code> object with <code>.stoi</code>, <code>__getitem__</code>, and <code>__call__</code>. Rather than touch that code, this wrapper gives <code>tiktoken</code>'s encoder the same interface.</p>
+        <div class="code-card">
+          <div class="code-label">TiktokenVocabWrapper</div>
+          <pre>class TiktokenVocabWrapper:
+    <span class="c">"""
+    A lightweight vocabulary wrapper around tiktoken to mimic the original
+    Vocab class structure, preventing breaks in later code blocks.
+    """</span>
+    def __init__(self, encoder):
+        self.encoder = encoder
+        <span class="c"># minimal fallback maps for any code that accesses .stoi / .itos explicitly</span>
+        self.stoi = {self.encoder.decode([i]): i for i in range(min(5000, self.encoder.n_vocab))}
+        self.itos = {i: self.encoder.decode([i]) for i in range(min(5000, self.encoder.n_vocab))}
+
+    def __getitem__(self, token):
+        if isinstance(token, int):          <span class="c"># already an id -> pass through</span>
+            return token
+        if token == "&lt;blank&gt;":
+            return self.encoder.eot_token   <span class="c"># reuse end-of-text as the padding id</span>
+        try:
+            return self.encoder.encode_single_token(token)
+        except ValueError:
+            return self.encoder.eot_token
+
+    def __call__(self, tokens):
+        if isinstance(tokens, list) and tokens and isinstance(tokens[0], int):
+            return tokens                   <span class="c"># already ids -> no-op</span>
+        if isinstance(tokens, str):
+            return self.encoder.encode(tokens)
+        return [self.__getitem__(t) for t in tokens]
+
+    def __len__(self):
+        return self.encoder.n_vocab
+
+    def get_stoi(self):
+        return self</pre>
+        </div>
+        <div class="box insight">
+          <span class="box-label">Key insight</span>
+          <p>This is an adapter, not a reimplementation — it exists purely so <code>Batch</code>, <code>collate_batch()</code>, and every other consumer of "vocab-shaped" objects downstream can keep calling <code>vocab(tokens)</code> or <code>vocab[token]</code> without caring that the real work is now delegated to tiktoken's BPE encoder. One notable design choice: <code>&lt;blank&gt;</code> is mapped onto tiktoken's own end-of-text token rather than getting a dedicated padding id, since BPE vocabularies don't ship with one.</p>
+        </div>
+      </article>
+
+      <article class="step" id="t2-3">
+        <div class="step-tag"><span class="n">2.3</span>load_vocab()</div>
+        <h3>Instant vocabulary — no corpus pass required</h3>
+        <div class="code-card">
+          <div class="code-label">load_vocab()</div>
+          <pre>def load_vocab(encoder_de, encoder_en):
+    <span class="c">"""
+    Replaces the heavy dataset counting and loading logic.
+    Instantly returns wrapped tiktoken encoders mimicking vocab objects.
+    """</span>
+    print("Initializing tiktoken BPE Vocabularies...")
+
+    vocab_src = TiktokenVocabWrapper(encoder_de)
+    vocab_tgt = TiktokenVocabWrapper(encoder_en)
+
+    print("Finished.\nVocabulary sizes (Fixed BPE Boundaries):")
+    print(f"Source (DE): {len(vocab_src)}")
+    print(f"Target (EN): {len(vocab_tgt)}")
+    return vocab_src, vocab_tgt</pre>
+        </div>
+        <p>Compare this to the original's <code>build_vocab_from_iterator()</code>, which had to tokenize every sentence across train, validation, and test splits just to count frequencies before a single vocabulary entry existed. Here, <code>len(vocab_src)</code> and <code>len(vocab_tgt)</code> are both just <code>encoder.n_vocab</code> — a fixed, pre-baked number, known before any data is even loaded.</p>
+      </article>
+
+      <article class="step" id="t3-1">
+        <div class="step-tag"><span class="n">3.1</span>create_dataloaders()</div>
+        <h3>Same collation logic, BPE tokenize functions underneath</h3>
+        <p>The batching and padding machinery — <code>collate_batch()</code>, <code>DistributedSampler</code>, the <code>DataLoader</code> construction — is untouched from the original. Only the tokenize functions handed into it change, and the padding id now comes from tiktoken directly instead of a vocabulary's reserved <code>&lt;blank&gt;</code> index.</p>
+        <div class="code-card">
+          <div class="code-label">create_dataloaders() — the tiktoken-specific parts</div>
+          <pre>def create_dataloaders(
+    device,
+    encoder_de,     <span class="c"># tiktoken encoder</span>
+    encoder_en,     <span class="c"># tiktoken encoder</span>
+    vocab_src,      <span class="c"># TiktokenVocabWrapper for source (DE)</span>
+    vocab_tgt,      <span class="c"># TiktokenVocabWrapper for target (EN)</span>
+    batch_size=12000,
+    max_padding=128,
+    is_distributed=True,
+):
+    def tokenize_de(text):
+        return encoder_de.encode(text)     <span class="c"># straight BPE encode, no spaCy step</span>
+
+    def tokenize_en(text):
+        return encoder_en.encode(text)
+
+    pad_id = encoder_de.eot_token           <span class="c"># end-of-text id stands in for &lt;blank&gt;</span>
+
+    def collate_fn(batch):
+        return collate_batch(
+            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt,
+            device, max_padding=max_padding, pad_id=pad_id,
+        )
+    <span class="c"># Multi30kDataset, DistributedSampler and DataLoader construction: unchanged</span></pre>
+        </div>
+        <div class="box analogy">
+          <span class="box-label">Analogy</span>
+          <p>Think of <code>collate_batch()</code> as a conveyor belt that doesn't care what machine hands it parts — swap the spaCy tokenizer for tiktoken's <code>encode()</code>, and the belt keeps running exactly the same way, just fed by a different upstream station.</p>
+        </div>
+      </article>
+
+      <article class="step" id="t3-2">
+        <div class="step-tag"><span class="n">3.2</span>check_outputs()</div>
+        <h3>Decoding predictions back to readable text</h3>
+        <p>Where the original walked <code>Vocab.itos</code> to turn predicted ids back into words, this version calls <code>encoder.decode()</code> directly — and has to explicitly strip tiktoken's end-of-text marker from the tail of the generated output, since it doubles as the padding token.</p>
+        <div class="code-card">
+          <div class="code-label">check_outputs() — decoding side</div>
+          <pre>pad_idx = encoder_de.eot_token
+
+src_ids = [int(x) for x in rb.src[0] if x != pad_idx]
+tgt_ids = [int(x) for x in rb.tgt[0] if x != pad_idx]
+
+src_text = encoder_de.decode(src_ids).replace("\n", "")
+tgt_text = encoder_en.decode(tgt_ids).replace("\n", "")
+
+model_out = greedy_decode(model, rb.src, rb.src_mask, 72, pad_idx)[0]
+model_out_ids = [int(x) for x in model_out if x != pad_idx]
+model_txt = encoder_en.decode(model_out_ids).split("&lt;|endoftext|&gt;", 1)[0]</pre>
+        </div>
+        <div class="box insight">
+          <span class="box-label">Why this matters</span>
+          <p>Because subword tokens don't map one-to-one with whitespace-separated words, <code>encoder.decode()</code> is doing real reconstruction work here — stitching BPE pieces back into readable text — in a way the original's word-level <code>itos</code> lookup never had to.</p>
+        </div>
+      </article>
+
+      <article class="step" id="t3-3">
+        <div class="step-tag"><span class="n">3.3</span>The Parameter Cost Tradeoff</div>
+        <h3>What a bigger, shared vocabulary actually costs</h3>
+        <p>The original blueprint's embedding and generator layers were sized against two corpus-specific vocabularies — roughly 60K German tokens and 37K English tokens (3.5 of the blueprint). <code>cl100k_base</code> is a general-purpose vocabulary of roughly 100K tokens, used twice — once for the source embedding table, once for the target — plus once more in the generator's output projection.</p>
+        <table>
+          <tr><th>layer</th><th>original (word vocab)</th><th>tiktoken (cl100k_base)</th></tr>
+          <tr><td>Source embedding</td><td>~60K × 512 ≈ 31M</td><td>~100K × 512 ≈ 51M</td></tr>
+          <tr><td>Target embedding</td><td>~37K × 512 ≈ 19M</td><td>~100K × 512 ≈ 51M</td></tr>
+          <tr><td>Generator projection</td><td>512 × 37K ≈ 19M</td><td>512 × 100K ≈ 51M</td></tr>
+          <tr><td><strong>I/O layers total</strong></td><td><strong>≈ 69M</strong></td><td><strong>≈ 153M</strong></td></tr>
+        </table>
+        <div class="box tradeoff">
+          <span class="box-label">Worth knowing before you swap tokenizers</span>
+          <p>Convenience has a real memory cost here: a vocabulary built to serve every language cl100k_base supports is far larger than one built for exactly this dataset, so the embedding and generator layers alone roughly double in size — on top of the ~19M/25M encoder/decoder-stack parameters that stay identical either way (3.5 of the original blueprint). For a small dataset like Multi30k, most of that vocabulary is never actually exercised during training.</p>
+        </div>
+        <div class="box analogy">
+          <span class="box-label">Analogy</span>
+          <p>It's the difference between stocking a pantry with exactly what one recipe needs versus keeping a pantry stocked for every recipe in a cookbook — the second is more convenient the next time you cook something new, but you're paying storage cost for ingredients this particular dish never touches.</p>
+        </div>
+      </article>
+
+      <div class="footer-cta">
+        <h3>See the full architecture walkthrough</h3>
+        <p>This edition only covers what changes at the tokenizer boundary. For the encoder/decoder stack, attention, masking, and training loop underneath, the original blueprint covers all 51 cells end to end.</p>
+        <a class="btn" href="annotated_transformer_blueprint.html">Open the original blueprint</a>
+        <a class="btn ghost" href="#top">Back to top ↑</a>
+      </div>
+
+    </div>
+
+    <footer class="page-foot">
+      TikToken edition of "The Annotated Transformer" · compiled by Ravi
+    </footer>
+  </main>
+</div>
+
+<script>
+  const sidebar = document.getElementById('sidebar');
+  const toggle = document.getElementById('menuToggle');
+  toggle.addEventListener('click', () => sidebar.classList.toggle('open'));
+  document.querySelectorAll('.sidebar nav a').forEach(a => {
+    a.addEventListener('click', () => sidebar.classList.remove('open'));
+  });
+
+  const sections = document.querySelectorAll('.step, .part-open');
+  const links = document.querySelectorAll('.sidebar nav a');
+  const byId = id => document.querySelector(`.sidebar nav a[href="#${id}"]`);
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const link = byId(entry.target.id);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+  sections.forEach(s => { if (s.id) io.observe(s); });
+</script>
+</body>
+</html>

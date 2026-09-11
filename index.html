@@ -56,7 +56,10 @@
     color:var(--ink); text-decoration:none; display:block; margin-bottom:4px;
   }
   .sidebar-brand .dot{color:var(--rust);}
-  .sidebar-sub{font-size:.78rem; color:var(--ink-faint); margin-bottom:26px;}
+  .sidebar-sub{font-size:.78rem; color:var(--ink-faint); margin-bottom:18px;}
+  .edition-switch{display:flex; gap:6px; margin-bottom:26px; border:1px solid var(--rule); border-radius:7px; padding:3px; background:var(--paper);}
+  .edition-switch a{flex:1; text-align:center; font-family:var(--mono); font-size:.7rem; padding:7px 4px; border-radius:5px; text-decoration:none; color:var(--ink-soft);}
+  .edition-switch a.current{background:var(--ink); color:var(--paper);}
   .sidebar nav .part-label{
     font-family:var(--mono); font-size:.7rem; letter-spacing:.04em;
     color:var(--teal); margin:22px 0 8px; display:flex; align-items:baseline; gap:6px;
@@ -209,8 +212,9 @@
   .footer-cta p{color:var(--ink-soft); margin:0 0 18px; max-width:52ch;}
   .footer-cta a.btn{
     display:inline-block; background:var(--ink); color:var(--paper); text-decoration:none;
-    padding:10px 20px; border-radius:6px; font-size:.9rem;
+    padding:10px 20px; border-radius:6px; font-size:.9rem; margin-right:10px;
   }
+  .footer-cta a.btn.ghost{background:transparent; color:var(--ink); border:1px solid var(--rule);}
   footer.page-foot{
     max-width:730px; margin:40px auto 0; padding:0 32px 60px; font-size:.8rem; color:var(--ink-faint);
   }
@@ -235,6 +239,11 @@
   <aside class="sidebar" id="sidebar">
     <a href="#top" class="sidebar-brand">The Annotated Transformer<span class="dot">.</span></a>
     <div class="sidebar-sub">51 cells · 1,330 lines · line-by-line</div>
+
+    <div class="edition-switch">
+      <a href="annotated_transformer_blueprint.html" class="current">Original</a>
+      <a href="annotated_transformer_tiktoken_edition.html">TikToken</a>
+    </div>
 
     <nav>
       <div class="part-label"><span class="part-num">1</span> Architecture</div>
@@ -788,7 +797,8 @@ decoder_cross = model.decoder.layers[layer].src_attn.attn      <span class="c">#
       <div class="footer-cta">
         <h3>Working through the full notebook</h3>
         <p>This page walks the architecture and training loop end to end. The companion notebook runs every cell against the Multi30k dataset, including the attention heatmaps referenced in 3.4.</p>
-        <a class="btn" href="#top">Back to top ↑</a>
+        <a class="btn" href="annotated_transformer_tiktoken_edition.html">See the TikToken edition →</a>
+        <a class="btn ghost" href="#top">Back to top ↑</a>
       </div>
 
     </div>
