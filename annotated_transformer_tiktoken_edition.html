@@ -104,6 +104,19 @@
   .box.tradeoff{background:#F0E9D8; border-left:3px solid var(--code-accent);}
   .box.tradeoff .box-label{color:#8A6A2E;}
 
+  .walkthrough{background:var(--paper-raised); border:1px solid var(--rule); border-radius:9px; padding:16px 20px; margin:16px 0;}
+  .walkthrough .wt-label{font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); margin-bottom:10px; display:block;}
+  .walkthrough ol{margin:0; padding-left:20px; font-size:.9rem; color:var(--ink-soft);}
+  .walkthrough li{margin-bottom:8px;}
+  .walkthrough li strong{color:var(--ink);}
+
+  .tok-example{border:1px solid var(--rule); border-radius:9px; padding:18px 20px; margin:18px 0; background:var(--paper-raised);}
+  .tok-row{display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;}
+  .tok-row .tag{font-family:var(--mono); font-size:.7rem; color:var(--ink-faint); width:96px; flex-shrink:0;}
+  .tok-chip{display:inline-block; font-family:var(--mono); font-size:.78rem; padding:4px 9px; border-radius:5px; margin:2px 3px 2px 0;}
+  .tok-chip.word{background:var(--teal-soft); color:var(--teal);}
+  .tok-chip.bpe{background:var(--rust-soft); color:var(--rust);}
+
   table{width:100%; border-collapse:collapse; margin:16px 0; font-size:.87rem;}
   th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule);}
   th{font-family:var(--mono); font-size:.72rem; color:var(--ink-faint); font-weight:500;}
@@ -195,6 +208,16 @@
       <article class="step" id="t1-1">
         <div class="step-tag"><span class="n">1.1</span>Why Swap Tokenizers</div>
         <h3>From two trained word-vocabularies to one pretrained BPE encoder</h3>
+        <div class="walkthrough">
+          <span class="wt-label">THE EASY VERSION — what "tokenizing" actually means</span>
+          <ol>
+            <li>A model can't read letters or words directly — everything it sees has to first become a list of numbers.</li>
+            <li>A <strong>word-level</strong> tokenizer (spaCy, the original notebook) does this by splitting text on spaces and punctuation, then looking each resulting word up in a table built specifically from this dataset.</li>
+            <li>A <strong>subword / BPE</strong> tokenizer (tiktoken, this edition) instead breaks text into smaller, frequently-reused chunks — sometimes whole words, sometimes word pieces — using a table trained once on a huge, general body of text.</li>
+            <li>Both approaches end in the same place — a list of integer ids the model can embed — but they get there differently, and that difference is everything this page walks through.</li>
+          </ol>
+        </div>
+
         <p>The original notebook (Part 3.1 of the blueprint) builds two separate vocabularies from scratch — one for German, one for English — by running spaCy over the entire Multi30k corpus and counting token frequencies. That's accurate, but it's also work: a tokenizer download, a full pass over the dataset, and a <code>min_freq</code> threshold to tune. This edition replaces all of that with <code>tiktoken</code>'s <code>cl100k_base</code> encoding — the same byte-pair-encoding scheme behind GPT-3.5/4 — which already knows how to tokenize dozens of languages, German and English included, with no training pass required.</p>
         <div class="compare">
           <div class="col old">
@@ -216,6 +239,12 @@
             </ul>
           </div>
         </div>
+        <p>Here's the difference made concrete, on a German compound word Multi30k's own vocabulary might never have seen enough times to earn its own id — <code>Geschwindigkeitsbegrenzung</code> ("speed limit"):</p>
+        <div class="tok-example">
+          <div class="tok-row"><span class="tag">word-level</span><span class="tok-chip word">Geschwindigkeitsbegrenzung → &lt;unk&gt;</span></div>
+          <div class="tok-row"><span class="tag">BPE (tiktoken)</span><span class="tok-chip bpe">Ge</span><span class="tok-chip bpe">schwindig</span><span class="tok-chip bpe">keits</span><span class="tok-chip bpe">begren</span><span class="tok-chip bpe">zung</span></div>
+        </div>
+        <p style="font-size:.85rem; color:var(--ink-faint); margin-top:-6px;">The word-level vocabulary either has this exact word or it doesn't — below the frequency threshold, it's gone, replaced by a single unrecoverable <code>&lt;unk&gt;</code>. BPE never has to give up: it keeps splitting into smaller, more common pieces until every piece is one it already knows, right down to individual bytes if it has to.</p>
         <div class="box insight">
           <span class="box-label">Why this matters</span>
           <p>Word-level vocabularies are corpus-dependent and brittle — a word Multi30k never saw becomes <code>&lt;unk&gt;</code>, permanently unrecoverable. Subword BPE tokenization can always decompose an unfamiliar word into smaller known pieces (or, worst case, raw bytes), so out-of-vocabulary words essentially stop existing as a category of failure.</p>
@@ -242,6 +271,15 @@
       <article class="step" id="t2-1">
         <div class="step-tag"><span class="n">2.1</span>load_tokenizers()</div>
         <h3>One encoder, returned twice</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP</span>
+          <ol>
+            <li>Ask tiktoken for the <code>cl100k_base</code> encoding — this downloads or loads a fixed, pretrained table of BPE merges, not something built from Multi30k.</li>
+            <li>That one encoder already knows how to tokenize German and English (and many other languages), so there's no separate German-specific or English-specific tokenizer to load.</li>
+            <li>Return the same encoder object twice, once for each of the "German" and "English" slots the rest of the notebook expects.</li>
+          </ol>
+        </div>
+
         <p>Where the original had two separate <code>load(de)</code> / <code>load(en)</code> calls, this version loads a single universal encoder and hands it back for both slots — deliberately, so the rest of the pipeline still works with an "encoder_de, encoder_en" pair without needing to know they're the same object.</p>
         <div class="code-card">
           <div class="code-label">load_tokenizers()</div>
@@ -268,6 +306,17 @@
       <article class="step" id="t2-2">
         <div class="step-tag"><span class="n">2.2</span>TiktokenVocabWrapper</div>
         <h3>Making a BPE encoder look like the old Vocab class</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — one call through the wrapper</span>
+          <ol>
+            <li>Something downstream calls <code>vocab_src(tokens)</code>, exactly like it would on the original word-level <code>Vocab</code>.</li>
+            <li><code>__call__</code> checks what it was actually handed: if it's already a list of integer ids, it's passed straight through untouched — no double-encoding.</li>
+            <li>If it's a raw string, the whole thing is handed to <code>encoder.encode()</code>, which runs the real BPE algorithm and returns a list of ids directly.</li>
+            <li>If it's a list of individual token strings, each one goes through <code>__getitem__</code> one at a time — falling back to the encoder's end-of-text id if a token can't be resolved on its own.</li>
+            <li><code>len(vocab_src)</code> just returns <code>encoder.n_vocab</code> — the wrapper never counts anything itself; it's reporting a number tiktoken already knows.</li>
+          </ol>
+        </div>
+
         <p>Every downstream function in the notebook — collation, batching, the training loop — was written against a <code>Vocab</code> object with <code>.stoi</code>, <code>__getitem__</code>, and <code>__call__</code>. Rather than touch that code, this wrapper gives <code>tiktoken</code>'s encoder the same interface.</p>
         <div class="code-card">
           <div class="code-label">TiktokenVocabWrapper</div>
@@ -314,6 +363,16 @@
       <article class="step" id="t2-3">
         <div class="step-tag"><span class="n">2.3</span>load_vocab()</div>
         <h3>Instant vocabulary — no corpus pass required</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — original vs. this edition</span>
+          <ol>
+            <li><strong>Original:</strong> read every sentence in train, validation, and test; tokenize each one with spaCy; count how often every word appears.</li>
+            <li><strong>Original:</strong> keep only words seen at least <code>min_freq</code> times; assign each a fresh integer id; everything else becomes <code>&lt;unk&gt;</code>.</li>
+            <li><strong>This edition:</strong> skip all of that — wrap the already-loaded <code>encoder_de</code> and <code>encoder_en</code> in <code>TiktokenVocabWrapper</code> directly.</li>
+            <li><strong>This edition:</strong> the vocabulary "size" is just read off the encoder (<code>encoder.n_vocab</code>), not computed from data — so this function returns in milliseconds instead of however long a full dataset pass takes.</li>
+          </ol>
+        </div>
+
         <div class="code-card">
           <div class="code-label">load_vocab()</div>
           <pre>def load_vocab(encoder_de, encoder_en):
@@ -337,6 +396,17 @@
       <article class="step" id="t3-1">
         <div class="step-tag"><span class="n">3.1</span>create_dataloaders()</div>
         <h3>Same collation logic, BPE tokenize functions underneath</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — one sentence pair through the pipeline</span>
+          <ol>
+            <li>A raw sentence pair — one German sentence, one English sentence — comes out of the <code>Multi30kDataset</code>.</li>
+            <li><code>tokenize_de</code> and <code>tokenize_en</code> each call <code>encoder.encode(text)</code>, turning the raw string directly into a list of BPE token ids — no intermediate list of word strings, unlike the spaCy version.</li>
+            <li><code>collate_batch()</code> — completely unmodified from the original — wraps each id list in start/end markers and pads it up to <code>max_padding</code>.</li>
+            <li>Padding now uses <code>encoder.eot_token</code> (end-of-text) as the fill value, since a BPE vocabulary doesn't ship with its own dedicated <code>&lt;blank&gt;</code> id the way the custom <code>Vocab</code> class did.</li>
+            <li>The padded, batched tensors come out the other end exactly the same shape they always did — everything past this point in the notebook (Batch, masks, training loop) doesn't know or care that the ids came from BPE instead of word-level tokenization.</li>
+          </ol>
+        </div>
+
         <p>The batching and padding machinery — <code>collate_batch()</code>, <code>DistributedSampler</code>, the <code>DataLoader</code> construction — is untouched from the original. Only the tokenize functions handed into it change, and the padding id now comes from tiktoken directly instead of a vocabulary's reserved <code>&lt;blank&gt;</code> index.</p>
         <div class="code-card">
           <div class="code-label">create_dataloaders() — the tiktoken-specific parts</div>
@@ -374,6 +444,16 @@
       <article class="step" id="t3-2">
         <div class="step-tag"><span class="n">3.2</span>check_outputs()</div>
         <h3>Decoding predictions back to readable text</h3>
+        <div class="walkthrough">
+          <span class="wt-label">HOW IT WORKS, STEP BY STEP — turning ids back into a sentence</span>
+          <ol>
+            <li>Take the model's predicted id sequence — the output of <code>greedy_decode()</code> — and strip out any padding/end-of-text ids from the tail.</li>
+            <li>Call <code>encoder.decode(ids)</code>, which reverses the BPE merges and re-assembles the pieces into a normal, readable string — this is the step doing real reconstruction work, since subword pieces don't line up one-to-one with words.</li>
+            <li>Cut the decoded string off at the first <code>&lt;|endoftext|&gt;</code> marker, in case anything leaked past where generation should have stopped.</li>
+            <li>Do the exact same decode on the source and ground-truth target ids too, so all three — source, ground truth, model output — can be printed side by side for comparison.</li>
+          </ol>
+        </div>
+
         <p>Where the original walked <code>Vocab.itos</code> to turn predicted ids back into words, this version calls <code>encoder.decode()</code> directly — and has to explicitly strip tiktoken's end-of-text marker from the tail of the generated output, since it doubles as the padding token.</p>
         <div class="code-card">
           <div class="code-label">check_outputs() — decoding side</div>
@@ -398,6 +478,16 @@ model_txt = encoder_en.decode(model_out_ids).split("&lt;|endoftext|&gt;", 1)[0]<
       <article class="step" id="t3-3">
         <div class="step-tag"><span class="n">3.3</span>The Parameter Cost Tradeoff</div>
         <h3>What a bigger, shared vocabulary actually costs</h3>
+        <div class="walkthrough">
+          <span class="wt-label">THE EASY VERSION — why vocabulary size changes model size</span>
+          <ol>
+            <li>Every vocabulary entry needs its own row in the embedding table — one learned 512-number vector per token id, for both the source and target embeddings.</li>
+            <li>A bigger vocabulary means more rows, and more rows means more parameters — purely from table size, before the encoder or decoder stack even gets involved.</li>
+            <li>The same thing happens in reverse at the output: the generator's final linear layer needs one output score per vocabulary entry, so its size also scales directly with vocabulary size.</li>
+            <li>Swap a ~60K/37K dataset-specific vocabulary for a ~100K general-purpose one, and all three of these layers grow — which is exactly what the table below adds up.</li>
+          </ol>
+        </div>
+
         <p>The original blueprint's embedding and generator layers were sized against two corpus-specific vocabularies — roughly 60K German tokens and 37K English tokens (3.5 of the blueprint). <code>cl100k_base</code> is a general-purpose vocabulary of roughly 100K tokens, used twice — once for the source embedding table, once for the target — plus once more in the generator's output projection.</p>
         <table>
           <tr><th>layer</th><th>original (word vocab)</th><th>tiktoken (cl100k_base)</th></tr>
